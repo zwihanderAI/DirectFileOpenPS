@@ -90,7 +90,7 @@ function Start-DirectFileOpen {
         }
 
         while ($true) {
-            $selection = (Read-Host '番号を入力してください（番号: ファイルを開きます / 番号d: フォルダを開きます / 0: 再検索します）').Trim()
+            $selection = (Read-Host '番号を入力してください（番号: ファイルを開く / 番号d: ファイルが格納されているフォルダを開く / 0: 再検索）').Trim()
             $number = 0
             if ($selection -notmatch '^([0-9]+)([dD]?)$') {
                 Write-Host '一覧の番号、番号d、または0を入力してください。'
