@@ -102,7 +102,7 @@ try {
     Assert-True ($testState.fileCalls[0] -eq $results[0].FullName) '一覧の番号と対象ファイルを対応させる'
     Assert-True ($testState.fileCalls[2] -eq $singleFile) '結果が1件の場合も番号で起動できる'
     Assert-True ($testState.folderCalls.Count -eq 2) '小文字dと大文字Dでフォルダを起動できる'
-    Assert-True (@($testState.prompts | Where-Object { $_ -eq '検索するファイル名（部分一致）' }).Count -eq 5) '空入力、該当なし、0で検索入力に戻る'
+    Assert-True (@($testState.prompts | Where-Object { $_ -eq '検索するファイル名を入力してください（部分一致）' }).Count -eq 5) '空入力、該当なし、0で検索入力に戻る'
     Assert-True (@($testState.outputLines | Where-Object { $_ -eq ('1. ' + $results[0].FullName) }).Count -eq 1) '番号とフルパスを表示する'
     Assert-True (@($testState.outputLines | Where-Object { $_ -eq ('検索対象ディレクトリ: ' + $testRoot) }).Count -eq 5) '検索の前に対象ディレクトリを表示する'
     Assert-True (@($testState.warningLines | Where-Object { $_ -like '*起動失敗のテスト*' }).Count -eq 1) '起動失敗を警告する'
@@ -110,7 +110,7 @@ try {
     foreach ($invalidRoot in @((Join-Path $testRoot 'missing'), $singleFile)) {
         $rejected = $false
         try { Start-DirectFileOpen -Directory $invalidRoot }
-        catch { $rejected = $_.Exception.Message -like '*検索対象ディレクトリを確認できない*' }
+        catch { $rejected = $_.Exception.Message -like '*検索対象ディレクトリを確認できません*' }
         Assert-True $rejected '存在しないパスとファイルの指定を開始時に拒否する'
     }
 
@@ -119,14 +119,21 @@ try {
     $remainingResults = @(Find-DirectFile -Directory (Join-Path $testRoot 'missing') -SearchText 'abc')
     Assert-True ($remainingResults.Count -eq 0 -and $testState.warningLines.Count -eq 1) '列挙エラーを警告し、検索処理を継続する'
 
-    $testState.inputs.Enqueue('README')
+    # 通常実行の検証も一時ディレクトリへ向け、個人設定の検索先にはアクセスしない。
+    function Get-Item {
+        [CmdletBinding()]
+        param([string]$LiteralPath, [switch]$Force)
+        if ($LiteralPath -eq $SearchDirectory) { $LiteralPath = $testRoot }
+        Microsoft.PowerShell.Management\Get-Item -LiteralPath $LiteralPath -Force:$Force
+    }
+    $testState.inputs.Enqueue('single')
     $testState.inputs.Enqueue('0')
     $testState.outputLines.Clear()
     $reachedEnd = $false
     try { & (Join-Path (Split-Path -Parent $PSScriptRoot) 'DirectFileOpenPS.ps1') }
     catch [System.OperationCanceledException] { $reachedEnd = $true }
     Assert-True ($reachedEnd -and $testState.inputs.Count -eq 0) '通常実行で設定値を使って検索と番号入力を開始する'
-    Assert-True ($testState.outputLines.Contains('1. ' + (Join-Path (Split-Path -Parent $PSScriptRoot) 'README.md'))) '通常実行で検索結果のフルパスを表示する'
+    Assert-True ($testState.outputLines.Contains('1. ' + $singleFile)) '通常実行で検索結果のフルパスを表示する'
 
     [Console]::WriteLine(('成功: {0} 件の検証 (PowerShell {1})' -f $script:assertions, $PSVersionTable.PSVersion))
 }

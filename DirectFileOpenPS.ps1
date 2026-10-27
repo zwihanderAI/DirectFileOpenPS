@@ -28,7 +28,7 @@ function Find-DirectFile {
         Sort-Object -Property FullName)
 
     if ($scanErrors.Count -gt 0) {
-        Write-Warning ('読み取れない項目が {0} 件あった。検索結果は読み取れた範囲のものである。' -f $scanErrors.Count)
+        Write-Warning ('読み取れない項目が {0} 件ありました。読み取れた範囲の検索結果を表示します。' -f $scanErrors.Count)
     }
 
     $files
@@ -63,25 +63,25 @@ function Start-DirectFileOpen {
     try {
         $root = Get-Item -LiteralPath $Directory -Force -ErrorAction Stop
         if (-not $root.PSIsContainer -or $root.PSProvider.Name -ne 'FileSystem') {
-            throw 'ファイルシステムのディレクトリを指定する必要がある。'
+            throw 'ファイルシステムのディレクトリを指定してください。'
         }
     }
     catch {
-        throw ('検索対象ディレクトリを確認できない: {0}{1}{2}' -f $Directory, [Environment]::NewLine, $_.Exception.Message)
+        throw ('検索対象ディレクトリを確認できません: {0}{1}{2}' -f $Directory, [Environment]::NewLine, $_.Exception.Message)
     }
 
     while ($true) {
         Write-Host ''
         Write-Host ('検索対象ディレクトリ: {0}' -f $root.FullName)
-        $searchText = Read-Host '検索するファイル名（部分一致）'
+        $searchText = Read-Host '検索するファイル名を入力してください（部分一致）'
         if ([string]::IsNullOrWhiteSpace($searchText)) {
-            Write-Host 'ファイル名を入力する必要がある。'
+            Write-Host 'ファイル名を入力してください。'
             continue
         }
 
         $files = @(Find-DirectFile -Directory $root.FullName -SearchText $searchText)
         if ($files.Count -eq 0) {
-            Write-Host '一致するファイルが見つからない。'
+            Write-Host '一致するファイルが見つかりませんでした。'
             continue
         }
 
@@ -90,24 +90,24 @@ function Start-DirectFileOpen {
         }
 
         while ($true) {
-            $selection = (Read-Host '番号: ファイルを開く / 番号d: フォルダを開く / 0: 再検索').Trim()
+            $selection = (Read-Host '番号を入力してください（番号: ファイルを開きます / 番号d: フォルダを開きます / 0: 再検索します）').Trim()
             $number = 0
             if ($selection -notmatch '^([0-9]+)([dD]?)$') {
-                Write-Host '一覧の番号、番号d、または0を入力する必要がある。'
+                Write-Host '一覧の番号、番号d、または0を入力してください。'
                 continue
             }
 
             $digits = $Matches[1]
             $openDirectory = $Matches[2] -ne ''
             if (-not [int]::TryParse($digits, [ref]$number)) {
-                Write-Host '番号が大きすぎる。'
+                Write-Host '番号が大きすぎます。'
                 continue
             }
             if ($number -eq 0 -and -not $openDirectory) {
                 break
             }
             if ($number -lt 1 -or $number -gt $files.Count) {
-                Write-Host ('1から{0}までの番号を入力する必要がある。再検索は0である。' -f $files.Count)
+                Write-Host ('1から{0}までの番号を入力してください。再検索する場合は0を入力してください。' -f $files.Count)
                 continue
             }
 
@@ -115,7 +115,7 @@ function Start-DirectFileOpen {
                 Open-DirectFile -File $files[$number - 1] -OpenDirectory:$openDirectory
             }
             catch {
-                Write-Warning ('開く処理に失敗した: {0}' -f $_.Exception.Message)
+                Write-Warning ('開く処理に失敗しました: {0}' -f $_.Exception.Message)
             }
         }
     }
