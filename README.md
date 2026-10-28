@@ -8,7 +8,17 @@ Windows PowerShell 5.1で動作する、ファイル名の部分一致検索と�
 
 ```powershell
 $SearchDirectory = 'C:\pleiades'
+$ExcludedDirectories = @(
+    'C:\pleiades\cache'
+    'C:\pleiades\2026-06\eclipse\plugins'
+)
 ```
+
+`$SearchDirectory`の直下にある`$ExcludedDirectories`へ、検索から除外するフォルダを絶対パスで複数指定できる。ドライブ付き絶対パス（`C:\folder`）とUNCパス（`\\server\share\folder`）に対応する。相対パス（`cache`、`C:cache`、`\cache`など）は設定エラーになる。検索結果を取得した後、指定したフォルダ配下のファイルをリストから削除する。除外が不要な場合は`@()`とする。
+
+除外パスは大文字・小文字を区別せず、フォルダ単位で比較する。`cache`を除外しても`cache-backup`は除外しない。ワイルドカードは使用しない。存在しない除外パスは検索結果に影響しない。検索対象自身やその親フォルダを除外した場合は検索結果が0件になる。
+
+除外フォルダ内も検索時には走査するため、除外指定によって検索時間は短縮されない。除外フォルダ内の読み取りエラーも警告の対象となる。
 
 Windows PowerShellでスクリプトの保存先へ移動し、次のコマンドを実行する。
 

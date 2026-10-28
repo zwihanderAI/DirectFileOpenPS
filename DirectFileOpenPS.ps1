@@ -4,7 +4,9 @@
 # 設定例: $SearchDirectory = 'C:\pleiades'
 #$SearchDirectory = $PSScriptRoot
 $SearchDirectory = "E:\"
-
+# 検索除外フォルダを絶対パスで複数指定する。
+# 設定例: $ExcludedDirectories = @('E:\除外フォルダ', 'E:\別の除外フォルダ')
+$ExcludedDirectories = @()
 
 function GetFileList {
     [CmdletBinding()]
@@ -13,25 +15,60 @@ function GetFileList {
         [string]$Directory,
 
         [Parameter(Mandatory = $true)]
-        [string]$SearchText
+        [string]$SearchText,
+
+        [string[]]$ExcludedDirectories = @()
     )
 
     $compareInfo = [System.Globalization.CultureInfo]::GetCultureInfo('ja-JP').CompareInfo
     $compareOptions = [System.Globalization.CompareOptions]::IgnoreCase -bor
         [System.Globalization.CompareOptions]::IgnoreWidth
     $scanErrors = @()
+    $rootPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Directory)
+    $excludedPaths = @(
+        foreach ($excludedDirectory in $ExcludedDirectories) {
+            if ([string]::IsNullOrWhiteSpace($excludedDirectory)) { continue }
+            try {
+                $path = $excludedDirectory.Replace('/', '\')
+                # C:folderや\folderも相対パスのため、ドライブ付き絶対パスかUNCパスに限定する。
+                if ($path -notmatch '^(?:[A-Za-z]:\\|\\\\[^\\]+\\[^\\]+(?:\\|$))') {
+                    throw '検索除外フォルダは絶対パスで指定してください。'
+                }
+                [System.IO.Path]::GetFullPath($path).TrimEnd([char[]]'\/')
+            }
+            catch {
+                throw ('検索除外フォルダのパスを確認してください: {0}{1}{2}' -f $excludedDirectory, [Environment]::NewLine, $_.Exception.Message)
+            }
+        }
+    )
 
-    # IndexOfを使い、*、?、[などもワイルドカードではなく文字として検索する。
-    $files = @(Get-ChildItem -LiteralPath $Directory -File -Recurse -Force `
+    $files = New-Object 'System.Collections.Generic.List[System.IO.FileInfo]'
+    # まず、ファイル名の条件に一致する検索結果を取得する。
+    Get-ChildItem -LiteralPath $rootPath -File -Recurse -Force `
             -ErrorAction SilentlyContinue -ErrorVariable scanErrors |
-        Where-Object { $compareInfo.IndexOf($_.Name, $SearchText, $compareOptions) -ge 0 } |
-        Sort-Object -Property FullName)
+        ForEach-Object {
+            # IndexOfを使い、*、?、[なども文字として検索する。
+            if ($compareInfo.IndexOf($_.Name, $SearchText, $compareOptions) -ge 0) {
+                $files.Add($_)
+            }
+        }
+
+    # 削除による添字のずれで対象を飛ばさないよう、末尾から比較する。
+    for ($i = $files.Count - 1; $i -ge 0; $i--) {
+        foreach ($excludedPath in $excludedPaths) {
+            # 区切り文字も比較し、fooを除外してもfoobarは除外しない。
+            if ($files[$i].FullName.StartsWith($excludedPath + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
+                $files.RemoveAt($i)
+                break
+            }
+        }
+    }
 
     if ($scanErrors.Count -gt 0) {
         Write-Warning ('読み取れない項目が {0} 件ありました。読み取れた範囲の検索結果を表示します。' -f $scanErrors.Count)
     }
 
-    $files
+    $files | Sort-Object -Property FullName
 }
 
 function OpenFile {
@@ -57,7 +94,9 @@ function main {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
-        [string]$Directory
+        [string]$Directory,
+
+        [string[]]$ExcludedDirectories = @()
     )
 
     try {
@@ -79,7 +118,7 @@ function main {
             continue
         }
 
-        $files = @(GetFileList -Directory $root.FullName -SearchText $searchText)
+        $files = @(GetFileList -Directory $root.FullName -SearchText $searchText -ExcludedDirectories $ExcludedDirectories)
         if ($files.Count -eq 0) {
             Write-Host '一致するファイルが見つかりませんでした。'
             continue
@@ -123,5 +162,5 @@ function main {
 
 # ドットソース時は関数定義のみを読み込む。通常実行時は入力待ちを開始する。
 if ($MyInvocation.InvocationName -ne '.') {
-    main -Directory $SearchDirectory
+    main -Directory $SearchDirectory -ExcludedDirectories $ExcludedDirectories
 }

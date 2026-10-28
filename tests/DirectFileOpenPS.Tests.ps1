@@ -42,6 +42,50 @@ try {
     Assert-True (@(GetFileList -Directory $nested -SearchText 'single').Count -eq 1) '空白と角括弧を含む検索対象パスを扱う'
     Assert-True (($results.FullName -join '|') -eq (($results.FullName | Sort-Object) -join '|')) 'フルパス順で結果を並べる'
 
+    $excludedFolder = Join-Path $testRoot 'omit'
+    $excludedChild = Join-Path $excludedFolder '子フォルダ'
+    $secondExcludedFolder = Join-Path $nested '除外 [folder]'
+    $similarFolder = Join-Path $testRoot 'omit-backup'
+    foreach ($folder in @($excludedFolder, $excludedChild, $secondExcludedFolder, $similarFolder)) {
+        $null = New-Item -ItemType Directory -Path $folder -Force
+        [System.IO.File]::WriteAllText((Join-Path $folder 'exclude-fixture.txt'), 'fixture')
+    }
+    $excludedFolders = @($excludedFolder, ($secondExcludedFolder.ToUpperInvariant() + '\'))
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'exclude-fixture').Count -eq 4) '除外未指定では全フォルダを検索する'
+    $filteredResults = @(GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories $excludedFolders)
+    Assert-True ($filteredResults.Count -eq 1 -and $filteredResults[0].DirectoryName -eq $similarFolder) '複数の除外先とその配下を除外し、似た名前のフォルダは残す'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories $excludedFolder).Count -eq 2) '除外先を1件だけ指定できる'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories ($excludedFolder + '\..\omit\')).Count -eq 2) '絶対パスのドットと末尾の区切りを正規化する'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories @('', $null, (Join-Path $testRoot 'missing'))).Count -eq 4) '空の指定と存在しない除外先は結果に影響しない'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories @($excludedFolder, $excludedFolder)).Count -eq 2) '除外先を重複指定できる'
+    foreach ($relativePath in @('omit', '.\omit', '..\omit', 'C:omit', '\omit', '\\server')) {
+        $rejected = $false
+        try { $null = GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories $relativePath }
+        catch { $rejected = $_.Exception.Message -like '*絶対パスで指定してください*' }
+        Assert-True $rejected ('相対パスまたは不完全なUNCパスを拒否する: ' + $relativePath)
+    }
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories '\\server\share\folder').Count -eq 4) 'UNC絶対パスを受け付ける'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories ($testRoot + '\')).Count -eq 0) '検索対象自身の除外で全件を除外する'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories $tempParent).Count -eq 0) '検索対象の親を除外した場合も全件を除外する'
+
+    $enumeratedFiles = New-Object 'System.Collections.Generic.List[string]'
+    $filteredAfterSearch = @(& {
+        function Get-ChildItem {
+            [CmdletBinding()]
+            param([string]$LiteralPath, [switch]$File, [switch]$Recurse, [switch]$Force)
+            Microsoft.PowerShell.Management\Get-ChildItem -LiteralPath $LiteralPath -File:$File -Recurse:$Recurse -Force:$Force |
+                ForEach-Object {
+                    $enumeratedFiles.Add($_.FullName)
+                    $_
+                }
+        }
+        GetFileList -Directory $testRoot -SearchText 'exclude-fixture' -ExcludedDirectories $excludedFolders
+    })
+    Assert-True ($filteredAfterSearch.Count -eq 1) '検索結果取得後の削除でも除外結果が正しい'
+    Assert-True ($enumeratedFiles.Contains((Join-Path $excludedFolder 'exclude-fixture.txt')) -and
+        $enumeratedFiles.Contains((Join-Path $excludedChild 'exclude-fixture.txt')) -and
+        $enumeratedFiles.Contains((Join-Path $secondExcludedFolder 'exclude-fixture.txt'))) '除外フォルダ配下も検索してから結果を削除する'
+
     $testState.fileCalls = New-Object 'System.Collections.Generic.List[string]'
     $testState.folderCalls = New-Object 'System.Collections.Generic.List[string]'
     $testState.outputLines = New-Object 'System.Collections.Generic.List[string]'
@@ -106,6 +150,16 @@ try {
     Assert-True (@($testState.outputLines | Where-Object { $_ -eq ('1. ' + $results[0].FullName) }).Count -eq 1) '番号とフルパスを表示する'
     Assert-True (@($testState.outputLines | Where-Object { $_ -eq ('検索対象ディレクトリ: ' + $testRoot) }).Count -eq 5) '検索の前に対象ディレクトリを表示する'
     Assert-True (@($testState.warningLines | Where-Object { $_ -like '*起動失敗のテスト*' }).Count -eq 1) '起動失敗を警告する'
+
+    $testState.inputs.Enqueue('exclude-fixture')
+    $testState.inputs.Enqueue('0')
+    $testState.outputLines.Clear()
+    $reachedEnd = $false
+    try { main -Directory $testRoot -ExcludedDirectories $excludedFolders }
+    catch [System.OperationCanceledException] { $reachedEnd = $true }
+    Assert-True $reachedEnd '除外を指定した状態でも再検索の入力待ちへ戻る'
+    Assert-True ($testState.outputLines.Contains('1. ' + (Join-Path $similarFolder 'exclude-fixture.txt')) -and
+        @($testState.outputLines | Where-Object { $_ -match '^[0-9]+\. ' }).Count -eq 1) 'mainから検索へ除外指定を引き渡す'
 
     foreach ($invalidRoot in @((Join-Path $testRoot 'missing'), $singleFile)) {
         $rejected = $false
