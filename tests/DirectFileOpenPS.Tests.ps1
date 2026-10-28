@@ -29,17 +29,17 @@ try {
     [System.IO.File]::WriteAllText($hiddenFile, 'fixture')
     [System.IO.File]::SetAttributes($hiddenFile, [System.IO.FileAttributes]::Hidden)
 
-    $results = @(Find-DirectFile -Directory $testRoot -SearchText 'AbC')
+    $results = @(GetFileList -Directory $testRoot -SearchText 'AbC')
     Assert-True ($results.Count -eq 2) '深い階層を含め、大文字・小文字と半角・全角を区別せず検索する'
-    Assert-True (@(Find-DirectFile -Directory $testRoot -SearchText 'ａｂＣ').Count -eq 2) '全角の検索文字列でも半角名に一致する'
-    Assert-True (@(Find-DirectFile -Directory $testRoot -SearchText 'ｶﾀｶﾅ').Count -eq 1) '半角カタカナが全角カタカナに一致する'
-    Assert-True (@(Find-DirectFile -Directory $testRoot -SearchText 'ｶﾞｲﾄﾞ').Count -eq 1) '濁点付き半角カタカナが全角名に一致する'
-    Assert-True (@(Find-DirectFile -Directory $testRoot -SearchText '[literal]').Count -eq 1) '角括弧をリテラルとして検索する'
-    Assert-True (@(Find-DirectFile -Directory $testRoot -SearchText '*').Count -eq 0) 'アスタリスクで全件一致しない'
-    Assert-True (@(Find-DirectFile -Directory $testRoot -SearchText '?').Count -eq 0) '疑問符をワイルドカードにしない'
-    Assert-True (@(Find-DirectFile -Directory $testRoot -SearchText 'DirectoryOnly').Count -eq 0) 'フォルダ名と親パスでは検索しない'
-    Assert-True (@(Find-DirectFile -Directory $testRoot -SearchText 'hidden').Count -eq 1) '隠しファイルを検索する'
-    Assert-True (@(Find-DirectFile -Directory $nested -SearchText 'single').Count -eq 1) '空白と角括弧を含む検索対象パスを扱う'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'ａｂＣ').Count -eq 2) '全角の検索文字列でも半角名に一致する'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'ｶﾀｶﾅ').Count -eq 1) '半角カタカナが全角カタカナに一致する'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'ｶﾞｲﾄﾞ').Count -eq 1) '濁点付き半角カタカナが全角名に一致する'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText '[literal]').Count -eq 1) '角括弧をリテラルとして検索する'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText '*').Count -eq 0) 'アスタリスクで全件一致しない'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText '?').Count -eq 0) '疑問符をワイルドカードにしない'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'DirectoryOnly').Count -eq 0) 'フォルダ名と親パスでは検索しない'
+    Assert-True (@(GetFileList -Directory $testRoot -SearchText 'hidden').Count -eq 1) '隠しファイルを検索する'
+    Assert-True (@(GetFileList -Directory $nested -SearchText 'single').Count -eq 1) '空白と角括弧を含む検索対象パスを扱う'
     Assert-True (($results.FullName -join '|') -eq (($results.FullName | Sort-Object) -join '|')) 'フルパス順で結果を並べる'
 
     $testState.fileCalls = New-Object 'System.Collections.Generic.List[string]'
@@ -74,8 +74,8 @@ try {
         $testState.warningLines.Add($Message)
     }
 
-    Open-DirectFile -File (Get-Item -LiteralPath $wideFile)
-    Open-DirectFile -File (Get-Item -LiteralPath $wideFile) -OpenDirectory
+    OpenFile -File (Get-Item -LiteralPath $wideFile)
+    OpenFile -File (Get-Item -LiteralPath $wideFile) -OpenDirectory
     Assert-True ($testState.fileCalls[0] -eq $wideFile) '既定のプログラム起動へリテラルのフルパスを渡す'
     Assert-True ($testState.folderCalls[0] -eq ('"{0}"' -f $nested)) '保存先フォルダの空白と角括弧を保持して引用する'
     $testState.fileCalls.Clear()
@@ -95,7 +95,7 @@ try {
 
     $testState.failNextOpen = $true
     $reachedEnd = $false
-    try { Start-DirectFileOpen -Directory $testRoot }
+    try { main -Directory $testRoot }
     catch [System.OperationCanceledException] { $reachedEnd = $true }
     Assert-True $reachedEnd '不正入力と起動失敗後も処理を継続し、全入力を消化する'
     Assert-True ($testState.fileCalls.Count -eq 3) '番号での起動を繰り返し、再検索後も起動できる'
@@ -109,14 +109,14 @@ try {
 
     foreach ($invalidRoot in @((Join-Path $testRoot 'missing'), $singleFile)) {
         $rejected = $false
-        try { Start-DirectFileOpen -Directory $invalidRoot }
+        try { main -Directory $invalidRoot }
         catch { $rejected = $_.Exception.Message -like '*検索対象ディレクトリを確認できません*' }
         Assert-True $rejected '存在しないパスとファイルの指定を開始時に拒否する'
     }
 
     # 列挙エラーが発生した場合も、警告して結果を返すことを確認する。
     $testState.warningLines.Clear()
-    $remainingResults = @(Find-DirectFile -Directory (Join-Path $testRoot 'missing') -SearchText 'abc')
+    $remainingResults = @(GetFileList -Directory (Join-Path $testRoot 'missing') -SearchText 'abc')
     Assert-True ($remainingResults.Count -eq 0 -and $testState.warningLines.Count -eq 1) '列挙エラーを警告し、検索処理を継続する'
 
     # 通常実行の検証も一時ディレクトリへ向け、個人設定の検索先にはアクセスしない。

@@ -6,7 +6,7 @@
 $SearchDirectory = "E:\"
 
 
-function Find-DirectFile {
+function GetFileList {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
@@ -34,7 +34,7 @@ function Find-DirectFile {
     $files
 }
 
-function Open-DirectFile {
+function OpenFile {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
@@ -53,7 +53,7 @@ function Open-DirectFile {
     }
 }
 
-function Start-DirectFileOpen {
+function main {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)]
@@ -79,7 +79,7 @@ function Start-DirectFileOpen {
             continue
         }
 
-        $files = @(Find-DirectFile -Directory $root.FullName -SearchText $searchText)
+        $files = @(GetFileList -Directory $root.FullName -SearchText $searchText)
         if ($files.Count -eq 0) {
             Write-Host '一致するファイルが見つかりませんでした。'
             continue
@@ -112,7 +112,7 @@ function Start-DirectFileOpen {
             }
 
             try {
-                Open-DirectFile -File $files[$number - 1] -OpenDirectory:$openDirectory
+                OpenFile -File $files[$number - 1] -OpenDirectory:$openDirectory
             }
             catch {
                 Write-Warning ('開く処理に失敗しました: {0}' -f $_.Exception.Message)
@@ -123,5 +123,5 @@ function Start-DirectFileOpen {
 
 # ドットソース時は関数定義のみを読み込む。通常実行時は入力待ちを開始する。
 if ($MyInvocation.InvocationName -ne '.') {
-    Start-DirectFileOpen -Directory $SearchDirectory
+    main -Directory $SearchDirectory
 }
